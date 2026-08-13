@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Un projet client de la passerelle (KoliGo, Sungku, ...).
+model Tenant {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  /// URL ou ce projet veut recevoir les evenements de paiement.
+  webhookUrl    String?
+  /// Secret HMAC permettant au projet de verifier nos webhooks sortants.
+  webhookSecret String
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  apiKeys      ApiKey[]
+  transactions Transaction[]
+  deliveries   WebhookDelivery[]
+
+  @@map("tenants")
+}
+
+/// Cle API d'un projet. Seul le hash est stocke ; la cle en clair n'est
+/// affichee qu'une fois, a la creation.
+model ApiKey {
+  id         String    @id @default(uuid())
+  tenantId   String
+  /// Prefixe lisible (ex. "sk_live_a1b2c3") servant a identifier la cle
+  /// dans l'interface sans exposer le secret.
+  prefix     String    @unique
+  hash       String    @unique
+  label      String?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+enum TransactionType {
+  DEPOSIT
+  PAYOUT
+  REFUND
+}
+
+/// Statut normalise, volontairement plus restreint que celui de pawaPay.
+/// NEEDS_ATTENTION signale une transaction dont l'issue reste indeterminee :
+/// elle ne doit jamais etre traitee comme un echec sans verification humaine.
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_ATTENTION
+}
+
+model Transaction {
+  id       String          @id
+  tenantId String
+  type     TransactionType
+  status   TransactionStatus @default(PENDING)
+
+  amount   Decimal @db.Decimal(20, 4)
+  currency String
+  country  String?
+  provider String?
+
+  phoneNumber String?
+  /// Reference propre au projet client (numero de commande, id de cagnotte...).
+  reference   String?
+  description String?
+  metadata    Json?
+
+  /// Pour un remboursement : identifiant du depot rembourse.
+  originalTransactionId String?
+
+  providerTransactionId String?
+  failureCode           String?
+  failureMessage        String?
+
+  /// Nombre de verifications de statut deja effectuees par le job de
+  /// reconciliation, pour eviter de sonder indefiniment.
+  reconcileAttempts Int       @default(0)
+  lastReconciledAt  DateTime?
+  completedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@unique([tenantId, reference])
+  @@index([status, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("transactions")
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+/// File d'attente des webhooks sortants (pattern outbox). Persistee en base
+/// plutot qu'en memoire pour survivre a un redemarrage du service.
+model WebhookDelivery {
+  id            String         @id @default(uuid())
+  tenantId      String
+  transactionId String
+  event         String
+  payload       Json
+  status        DeliveryStatus @default(PENDING)
+  attempts      Int            @default(0)
+  nextAttemptAt DateTime       @default(now())
+  deliveredAt   DateTime?
+  lastError     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
+}
