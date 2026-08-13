@@ -1,0 +1,36 @@
+name: CI
+
+# Verification des propositions de fusion. Les poussees directes sur main et
+# preprod sont deja verifiees par le workflow de deploiement, qui refuse de
+# publier une image si la compilation ou les tests echouent.
+on:
+  pull_request:
+    branches: [main, preprod]
+
+jobs:
+  verifier:
+    name: Compilation et tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Generer le client Prisma
+        run: npx prisma generate
+
+      - name: Verifier la coherence du schema Prisma
+        run: npx prisma validate
+
+      - name: Compiler
+        run: npm run build
+
+      - name: Tester
+        run: npm test
