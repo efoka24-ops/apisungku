@@ -1,6 +1,6 @@
 name: Build et deploiement
 
-# preprod -> environnement de preproduction
+# preprod -> environnement de preproduction f
 # main    -> production
 on:
   push:
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: >-
-      github.event_name == 'push' &&
+      github.event_name == 'push' && 
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preprod')
     environment:
       name: ${{ github.ref_name == 'main' && 'production' || 'preproduction' }}
