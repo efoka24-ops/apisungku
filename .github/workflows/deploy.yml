@@ -28,7 +28,7 @@ jobs:
       - run: npm test
 
   # ─── 2. Image ─────────────────────────────────────────────────────────────
-  image:
+  build:
     name: Construire et publier l'image
     runs-on: ubuntu-latest
     # Une image n'est jamais publiee sur du code qui ne compile pas.
@@ -36,10 +36,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-      tags: ${{ steps.meta.outputs.tags }}
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +47,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # Fourni automatiquement par Actions : aucun secret a creer.
+          # Fourni automatiquement par Actions : aucun secret a creer ici.
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Calculer les tags
@@ -60,53 +56,75 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=${{ github.run_number }}
             type=ref,event=branch
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Construire et pousser
-        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Le cache du registre evite de reinstaller node_modules a chaque fois.
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   # ─── 3. Deploiement ───────────────────────────────────────────────────────
-  # A ADAPTER a l'hebergement retenu. Le squelette ci-dessous suppose un VPS
-  # joignable en SSH ; voir les variantes en commentaire en fin de fichier.
-  deployer:
-    name: Deployer
+  deploy:
     runs-on: ubuntu-latest
-    needs: image
+    needs: build
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preprod')
     environment:
       name: ${{ github.ref_name == 'main' && 'production' || 'preproduction' }}
 
     steps:
-      - name: Deployer sur le serveur
-        uses: appleboy/ssh-action@v1
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            cd ${{ vars.DEPLOY_PATH || '/opt/apisungku' }}
 
-            echo "${{ secrets.GITHUB_TOKEN }}" \
-              | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "Connected to server"
+            whoami
+            hostname
+            pwd
+            cd "${{ secrets.DEPLOY_PATH }}"
 
-            docker compose pull api
-            # Les migrations Prisma sont appliquees au demarrage du conteneur
-            # (voir CMD du Dockerfile) : le schema ne reste jamais en retard.
-            docker compose up -d --no-deps api
-            docker image prune -f
+            echo "Login to GHCR"
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+            echo "Set image tag (APISUNGKU_TAG=${{ github.run_number }})"
+            # Le .env du serveur existe deja et porte les secrets applicatifs
+            # (DATABASE_URL, PAWAPAY_API_TOKEN, API_KEY_SALT). On n'y touche
+            # que pour la ligne du tag : le reste ne doit jamais etre ecrase
+            # par le pipeline.
+            if grep -q '^APISUNGKU_TAG=' .env; then
+              sed -i 's/^APISUNGKU_TAG=.*/APISUNGKU_TAG=${{ github.run_number }}/' .env
+            else
+              echo 'APISUNGKU_TAG=${{ github.run_number }}' >> .env
+            fi
+
+            echo "Pull latest images"
+            docker compose pull
+
+            echo "Recreate containers"
+            docker compose up -d --force-recreate --remove-orphans
+
+            echo "Remove unused images"
+            docker image prune -af
+
+            echo "Deployment finished"
 
       - name: Verifier que le service repond
+        # Un deploiement qui ne repond pas doit faire echouer le job, pas
+        # passer inapercu.
         run: |
           for i in $(seq 1 10); do
             if curl -fsS "${{ vars.HEALTHCHECK_URL }}" > /dev/null; then
@@ -120,18 +138,16 @@ jobs:
           exit 1
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Secrets et variables a definir dans Settings > Secrets and variables :
+# A definir dans Settings > Secrets and variables > Actions :
 #
-#   Secrets : DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY
-#   Variables : DEPLOY_PATH, HEALTHCHECK_URL
+#   Secrets  : SERVER_HOST, SERVER_USER, SERVER_SSH_KEY, DEPLOY_PATH,
+#              GHCR_USERNAME, GHCR_TOKEN
+#   Variables: HEALTHCHECK_URL   (ex. https://api.sungku.cm/v1/health)
 #
-# Le token du registre (GITHUB_TOKEN) est fourni automatiquement.
+# GHCR_TOKEN est un token personnel avec la portee read:packages : il sert au
+# serveur a tirer l'image. Le GITHUB_TOKEN du job de build, lui, est fourni
+# automatiquement.
 #
-# Variantes selon l'hebergement finalement retenu :
-#
-#   Railway  : remplacer le job par `railway up --service apisungku`
-#              avec RAILWAY_TOKEN en secret.
-#   Render   : un simple appel curl sur le Deploy Hook suffit ;
-#              le job `image` devient meme inutile (Render construit lui-meme).
-#   Fly.io   : `flyctl deploy --image <tag>` avec FLY_API_TOKEN en secret.
+# Les secrets applicatifs (DATABASE_URL, PAWAPAY_API_TOKEN, API_KEY_SALT) ne
+# passent jamais par GitHub : ils vivent dans le .env du serveur.
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,43 @@
+# Composition de DEVELOPPEMENT : base PostgreSQL locale et image construite
+# depuis les sources, sans passer par le registre.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# La base est exposee sur le port 5432, donc utilisable aussi sans conteneur :
+#   DATABASE_URL=postgresql://apisungku:apisungku@localhost:5432/apisungku
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: apisungku
+      POSTGRES_PASSWORD: apisungku
+      POSTGRES_DB: apisungku
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U apisungku']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Ecrase la valeur du .env : en conteneur, la base se joint par son nom
+      # de service, pas par localhost.
+      DATABASE_URL: postgresql://apisungku:apisungku@db:5432/apisungku?schema=public
+      NODE_ENV: development
+    ports:
+      - '3000:3000'
+
+volumes:
+  db_data:

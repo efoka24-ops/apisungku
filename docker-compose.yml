@@ -1,32 +1,32 @@
-services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: apisungku
-      POSTGRES_PASSWORD: apisungku
-      POSTGRES_DB: apisungku
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    ports:
-      - '5432:5432'
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U apisungku']
-      interval: 5s
-      timeout: 5s
-      retries: 10
+# Composition du SERVEUR (preprod / production).
+#
+# Ce fichier vit a cote d'un .env qui porte les secrets applicatifs et que le
+# pipeline ne reecrit jamais, hormis la ligne APISUNGKU_TAG.
+#
+# Pour developper en local, utiliser docker-compose.dev.yml a la place.
 
+services:
   api:
-    build: .
+    # Le tag est pilote par le pipeline (numero de run). La valeur de repli
+    # permet un demarrage manuel du serveur avant le premier deploiement.
+    image: ghcr.io/efoka24-ops/apisungku:${APISUNGKU_TAG:-latest}
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     env_file: .env
-    environment:
-      DATABASE_URL: postgresql://apisungku:apisungku@db:5432/apisungku?schema=public
     ports:
       - '3000:3000'
-
-volumes:
-  db_data:
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # La premiere sonde attend que les migrations Prisma soient appliquees.
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'

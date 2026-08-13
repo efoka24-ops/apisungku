@@ -32,11 +32,15 @@ npm run start:dev
 
 Documentation interactive : <http://localhost:3000/docs>
 
-Avec Docker :
+Avec Docker (base PostgreSQL locale incluse) :
 
 ```bash
-docker compose up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
+
+`docker-compose.yml` sans suffixe est la composition du **serveur** : elle tire
+l'image publiée sur `ghcr.io` et ne contient pas de base. Ne pas l'utiliser en
+local.
 
 ### Créer un projet client
 
@@ -205,6 +209,27 @@ callbacks, aucune transaction ne reste bloquée.
 
 `API_KEY_SALT` ne doit **jamais** changer après création des clés : toutes les
 clés existantes deviendraient invalides d'un coup.
+
+## Déploiement
+
+Chaque poussée sur `preprod` ou `main` déclenche le pipeline : vérification,
+construction de l'image, publication sur `ghcr.io`, puis déploiement SSH et
+contrôle que le service répond.
+
+Sur le serveur, un seul dossier à préparer (celui de `DEPLOY_PATH`) contenant
+`docker-compose.yml` et un `.env`. Le pipeline ne réécrit **que** la ligne
+`APISUNGKU_TAG` de ce `.env` : les secrets applicatifs y restent intacts et ne
+transitent jamais par GitHub.
+
+À définir dans *Settings → Secrets and variables → Actions* :
+
+| | |
+|---|---|
+| Secrets | `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`, `DEPLOY_PATH`, `GHCR_USERNAME`, `GHCR_TOKEN` |
+| Variables | `HEALTHCHECK_URL` |
+
+`GHCR_TOKEN` est un token personnel avec la portée `read:packages`, utilisé par
+le serveur pour tirer l'image.
 
 ## Tests
 
