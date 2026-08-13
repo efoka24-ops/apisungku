@@ -10,7 +10,14 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
+    // Fige la racine des sources. Sans cela, tout fichier compile hors de src/
+    // elargit la racine commune et decale la sortie vers dist/src/, ce qui
+    // casse le chemin d'entree du conteneur.
+    "rootDir": "./src",
     "incremental": true,
+    // Doit rester sous outDir : sinon `nest build` vide dist/ sans toucher au
+    // cache, le compilateur se croit a jour et n'emet plus rien.
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
@@ -22,5 +29,8 @@
       "@/*": ["src/*"]
     }
   },
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*"],
+  // scripts/ s'execute via ts-node, jamais compile. Les tests ne partent pas
+  // dans l'image.
+  "exclude": ["node_modules", "dist", "scripts", "**/*.spec.ts"]
 }

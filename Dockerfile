@@ -31,5 +31,7 @@ USER node
 EXPOSE 3000
 
 # Les migrations sont appliquees au demarrage : un deploiement ne doit jamais
-# laisser le schema en retard sur le code.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+# laisser le schema en retard sur le code. Le binaire local est appele
+# directement : via npx, un serveur mal connecte tenterait un telechargement
+# a chaque demarrage.
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/main.js"]
