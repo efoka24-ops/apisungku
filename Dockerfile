@@ -32,4 +32,5 @@ EXPOSE 3000
 
 # Les migrations sont appliquees au demarrage : un deploiement ne doit jamais
 # laisser le schema en retard sur le code.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+# CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
