@@ -13,7 +13,14 @@ describe('mapProviderStatus', () => {
   });
 
   it('regroupe les statuts intermediaires', () => {
-    for (const status of ['ACCEPTED', 'ENQUEUED', 'SUBMITTED', 'PROCESSING']) {
+    for (const status of [
+      'ACCEPTED',
+      'ENQUEUED',
+      'SUBMITTED',
+      'PROCESSING',
+      // Observe en production sur un paiement Orange Cameroun.
+      'IN_RECONCILIATION',
+    ]) {
       expect(mapProviderStatus(status)).toBe('PROCESSING');
     }
   });

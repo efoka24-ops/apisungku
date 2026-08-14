@@ -429,6 +429,9 @@ export function mapProviderStatus(status: string): TransactionStatus {
     case 'ENQUEUED':
     case 'SUBMITTED':
     case 'PROCESSING':
+    // pawaPay rapproche l'operation avec l'operateur. Etat transitoire, non
+    // final : l'escalader en NEEDS_ATTENTION declencherait de fausses alertes.
+    case 'IN_RECONCILIATION':
       return 'PROCESSING';
     default:
       // Statut non reconnu : surtout ne pas deviner.
