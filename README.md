@@ -44,13 +44,25 @@ local.
 
 ### Créer un projet client
 
+En local :
+
 ```bash
 npm run tenant:create -- --name "Sungku" --slug sungku \
   --webhook https://sungku.cm/api/paiements/webhook
 ```
 
-La clé API et le secret de webhook s'affichent **une seule fois**. Ils ne sont
-pas stockés en clair : perdus, il faut en régénérer.
+Sur le serveur, la même commande dans le conteneur :
+
+```bash
+docker exec <conteneur> node dist/cli/create-tenant.js \
+  --name "Sungku" --slug sungku --webhook https://sungku.cm/api/paiements/webhook
+```
+
+La clé API s'affiche **une seule fois** — seul son hachage est conservé. Relancer
+la commande sur un slug existant n'échoue pas : elle ajoute une clé
+supplémentaire, ce qui en fait aussi l'outil de rotation. Le secret de webhook,
+lui, n'est jamais régénéré : le changer casserait la vérification de signature
+côté projet client, sans prévenir.
 
 ### Déclarer le callback chez pawaPay
 
@@ -209,6 +221,35 @@ callbacks, aucune transaction ne reste bloquée.
 
 `API_KEY_SALT` ne doit **jamais** changer après création des clés : toutes les
 clés existantes deviendraient invalides d'un coup.
+
+## Démarrage automatique du conteneur
+
+`docker/entrypoint.sh` s'exécute à chaque démarrage et enchaîne :
+
+1. **attente de la base** — jusqu'à 30 tentatives. Sans cela, le tout premier
+   démarrage d'une pile neuve échoue systématiquement, la base n'étant pas
+   encore prête ;
+2. **mise à niveau du schéma** via `migrate deploy`. Si la base contient déjà
+   les tables sans historique de migration — typiquement une base créée avec
+   `prisma db push` — l'erreur `P3005` est rattrapée automatiquement : les
+   migrations sont marquées comme appliquées plutôt que rejouées. Aucune donnée
+   n'est touchée ;
+3. **amorçage optionnel d'un projet**, si `BOOTSTRAP_TENANT_SLUG` est défini ;
+4. **démarrage** du service.
+
+Toute autre erreur de migration arrête le démarrage : mieux vaut un refus net
+qu'un service tournant sur un schéma incohérent.
+
+L'amorçage automatique s'active ainsi :
+
+```bash
+BOOTSTRAP_TENANT_SLUG=sungku
+BOOTSTRAP_TENANT_NAME=Sungku
+BOOTSTRAP_TENANT_WEBHOOK=https://sungku.cm/api/paiements/webhook
+```
+
+⚠️ La clé API apparaît alors **dans les journaux du conteneur**. À réserver à la
+préproduction, et à retirer une fois le projet créé.
 
 ## Déploiement
 

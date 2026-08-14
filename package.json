@@ -12,7 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "tenant:create": "ts-node -r tsconfig-paths/register scripts/create-tenant.ts",
+    "tenant:create": "npm run build && node dist/cli/create-tenant.js",
     "test": "jest",
     "lint": "eslint \"{src,test,scripts}/**/*.ts\" --fix"
   },
