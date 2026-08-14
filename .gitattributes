@@ -1,0 +1,10 @@
+# Normalisation par defaut des fichiers texte.
+* text=auto eol=lf
+
+# Les scripts shell et le Dockerfile doivent garder des fins de ligne LF, y
+# compris sur une machine Windows : des CRLF rendent le script inexecutable
+# dans le conteneur, avec un « no such file or directory » trompeur qui
+# designe l'interpreteur, pas le fichier.
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker/** text eol=lf
