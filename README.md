@@ -42,7 +42,41 @@ docker compose -f docker-compose.dev.yml up --build
 l'image publiée sur `ghcr.io` et ne contient pas de base. Ne pas l'utiliser en
 local.
 
-### Créer un projet client
+### Enrôler un projet par HTTP (recommandé)
+
+Aucun accès SSH nécessaire : un appel suffit, protégé par `ADMIN_API_KEY`.
+
+```bash
+curl -X POST https://apisungku.trugroup.cm/v1/projects \
+  -H "X-Admin-Key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Sungku","slug":"sungku","webhookUrl":"https://sungku.cm/api/paiements/webhook"}'
+```
+
+```json
+{
+  "slug": "sungku",
+  "apiKey": "sk_live_…",
+  "webhookSecret": "…",
+  "avertissement": "Conservez apiKey et webhookSecret maintenant : ils ne seront plus jamais affichés."
+}
+```
+
+C'est la **seule** réponse où la clé et le secret apparaissent en clair.
+
+Le projet gère ensuite lui-même sa configuration, avec sa propre clé :
+
+| | |
+|---|---|
+| `GET /v1/me` | vérifier sa clé, voir son environnement et son URL de callback |
+| `PATCH /v1/me` | changer son URL de webhook |
+| `POST /v1/projects/:slug/keys` | ajouter une clé (rotation, réservé à l'admin) |
+
+Sans `ADMIN_API_KEY` défini, l'enrôlement HTTP renvoie `503` : un endpoint ouvert
+laisserait n'importe qui créer un projet et déclencher des mouvements de fonds
+sur le compte marchand.
+
+### Créer un projet client en ligne de commande
 
 En local :
 

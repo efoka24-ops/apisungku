@@ -20,6 +20,11 @@ export default () => ({
 
   apiKeySalt: required('API_KEY_SALT'),
 
+  // Ouvre l'enrolement des projets par HTTP. Non definie, la creation de
+  // projet est refusee : mieux vaut un service ferme qu'un service ou
+  // n'importe qui peut declencher des mouvements de fonds.
+  adminApiKey: process.env.ADMIN_API_KEY ?? '',
+
   pawapay: {
     baseUrl: (process.env.PAWAPAY_BASE_URL ?? 'https://api.sandbox.pawapay.io')
       .replace(/\/+$/, ''),
