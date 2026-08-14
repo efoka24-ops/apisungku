@@ -115,7 +115,11 @@ jobs:
             docker compose pull
 
             echo "Recreate containers"
-            docker compose up -d --force-recreate --remove-orphans
+            # --remove-orphans a ete retire volontairement : il supprime tout
+            # conteneur du projet non declare dans docker-compose.yml. Si la
+            # base a ete demarree autrement, le deploiement la detruirait, et
+            # l'application se retrouverait sans base sans explication.
+            docker compose up -d --force-recreate
 
             echo "Remove unused images"
             docker image prune -af

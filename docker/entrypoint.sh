@@ -13,6 +13,17 @@ log() {
 # Un conteneur de base de donnees demarre rarement avant l'application. Sans
 # cette attente, le premier demarrage echoue systematiquement au premier
 # deploiement d'une pile neuve.
+# Rappelle la cible sans divulguer le mot de passe : la premiere question en
+# cas d'echec est toujours « quelle base essaie-t-il de joindre ? ».
+CIBLE=$(printf '%s' "${DATABASE_URL:-}" | sed -E 's#^[^:]+://[^@]*@##; s#\?.*$##')
+log "Base visee : ${CIBLE:-<DATABASE_URL absente>}"
+
+if [ -z "${DATABASE_URL:-}" ]; then
+  log "ECHEC : DATABASE_URL n'est pas definie dans l'environnement du conteneur."
+  log "Verifier le fichier .env reference par env_file dans docker-compose.yml."
+  exit 1
+fi
+
 log "Attente de la base de donnees..."
 i=1
 while [ "$i" -le 30 ]; do
@@ -28,7 +39,19 @@ while [ "$i" -le 30 ]; do
     break
   fi
   if [ "$i" -eq 30 ]; then
-    log "ECHEC : base injoignable apres 30 tentatives. Verifier DATABASE_URL."
+    log "ECHEC : ${CIBLE} injoignable apres 30 tentatives (60 s)."
+    log "Causes usuelles :"
+    log "  - le conteneur de base n'est pas demarre (docker compose ps) ;"
+    log "  - il a ete supprime par un 'docker compose up --remove-orphans'"
+    log "    parce que le service n'est pas declare dans docker-compose.yml ;"
+    log "  - l'hote ou les identifiants de DATABASE_URL sont errones."
+    # Detail de la derniere tentative, pour distinguer un refus d'un timeout.
+    node -e "
+      const { PrismaClient } = require('@prisma/client');
+      new PrismaClient().\$queryRaw\`SELECT 1\`
+        .catch((e) => console.error('[entrypoint] motif : ' + String(e.message).split('\n')[0]))
+        .finally(() => process.exit(0));
+    " 2>&1 | head -3
     exit 1
   fi
   i=$((i + 1))
