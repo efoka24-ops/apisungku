@@ -106,6 +106,11 @@ export class PawaPayService {
     return this.request('POST', '/v2/predict-provider', { phoneNumber });
   }
 
+  /** Soldes des portefeuilles du compte marchand, par devise. */
+  walletBalances(): Promise<unknown> {
+    return this.request('GET', '/v2/wallet-balances');
+  }
+
   availability(country?: string): Promise<unknown> {
     const suffix = country ? `?country=${encodeURIComponent(country)}` : '';
     return this.request('GET', `/v2/availability${suffix}`);

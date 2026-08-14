@@ -76,6 +76,17 @@ export class ToolkitController {
     return this.pawapay.availability(country);
   }
 
+  @Get('balances')
+  @ApiOperation({
+    summary: 'Soldes du compte marchand',
+    description:
+      'A consulter avant un reversement : un solde insuffisant fait echouer ' +
+      "l'operation cote operateur, apres coup.",
+  })
+  balances() {
+    return this.pawapay.walletBalances();
+  }
+
   @Post('predict-provider')
   @HttpCode(200)
   @ApiOperation({
