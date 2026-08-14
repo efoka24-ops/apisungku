@@ -35,4 +35,8 @@ EXPOSE 3000
 
 # Attente de la base, mise a niveau du schema, puis demarrage. Un deploiement
 # ne doit jamais laisser le schema en retard sur le code.
+#
+# Le chemin d'entree est bien dist/main.js : le detour par dist/src/main.js
+# n'etait qu'un contournement, la sortie de compilation ayant ete corrigee a
+# la source (voir rootDir dans tsconfig.json).
 ENTRYPOINT ["/bin/sh", "./docker/entrypoint.sh"]
