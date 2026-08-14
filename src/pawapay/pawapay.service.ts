@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createPrivateKey } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
+import { SigningAlgorithm, SigningConfig, signRequest } from './signing';
 import {
   PawaPayInitiationResponse,
   PawaPayPredictProviderResponse,
@@ -21,11 +24,41 @@ export class PawaPayService {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly timeoutMs: number;
+  private readonly signing?: SigningConfig;
 
   constructor(config: ConfigService) {
     this.baseUrl = config.get<string>('pawapay.baseUrl')!;
     this.token = config.get<string>('pawapay.apiToken')!;
     this.timeoutMs = config.get<number>('pawapay.timeoutMs')!;
+    this.signing = this.loadSigningKey(config);
+  }
+
+  /**
+   * La signature n'est active que si une cle est fournie. Un compte pawaPay
+   * ou les signatures sont exigees rejette sinon toute operation financiere
+   * avec HTTP_SIGNATURE_ERROR.
+   */
+  private loadSigningKey(config: ConfigService): SigningConfig | undefined {
+    const inline = config.get<string>('pawapay.signingKey');
+    const path = config.get<string>('pawapay.signingKeyPath');
+    const keyId = config.get<string>('pawapay.signingKeyId');
+
+    if (!inline && !path) return undefined;
+
+    if (!keyId) {
+      throw new Error(
+        'PAWAPAY_SIGNING_KEY_ID est requis des lors qu\'une cle de signature est fournie.',
+      );
+    }
+
+    const pem = inline
+      ? inline.replace(/\\n/g, '\n')
+      : readFileSync(path!, 'utf8');
+
+    const algorithm = config.get<SigningAlgorithm>('pawapay.signingAlgorithm')!;
+    this.logger.log(`Signature des requetes active (${algorithm}, keyid ${keyId}).`);
+
+    return { key: createPrivateKey(pem), keyId, algorithm };
   }
 
   // ─── Operations ──────────────────────────────────────────────────────────
@@ -89,16 +122,29 @@ export class PawaPayService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+
+    // Seules les requetes porteuses d'un corps sont signees : la signature
+    // couvre le condensat de ce corps.
+    if (this.signing && payload !== undefined) {
+      Object.assign(
+        headers,
+        signRequest(this.signing, { method, url, body: payload }),
+      );
+    }
+
     let response: Response;
     try {
       response = await fetch(url, {
         method,
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers,
+        body: payload,
         signal: controller.signal,
       });
     } catch (error) {

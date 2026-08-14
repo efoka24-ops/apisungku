@@ -31,6 +31,17 @@ export default () => ({
     apiToken: required('PAWAPAY_API_TOKEN'),
     timeoutMs: parseInt(process.env.PAWAPAY_TIMEOUT_MS ?? '15000', 10),
     callbackSecret: process.env.PAWAPAY_CALLBACK_SECRET ?? '',
+
+    // Signature des requetes (RFC 9421). Obligatoire des lors que la
+    // fonctionnalite est activee sur le compte pawaPay : sans elle, toute
+    // operation financiere est rejetee en HTTP_SIGNATURE_ERROR.
+    // La cle peut etre fournie en ligne (retours a la ligne echappes en \n)
+    // ou par chemin de fichier, ce dernier etant preferable.
+    signingKey: process.env.PAWAPAY_SIGNING_KEY ?? '',
+    signingKeyPath: process.env.PAWAPAY_SIGNING_KEY_PATH ?? '',
+    signingKeyId: process.env.PAWAPAY_SIGNING_KEY_ID ?? '',
+    signingAlgorithm:
+      process.env.PAWAPAY_SIGNING_ALGORITHM ?? 'ecdsa-p256-sha256',
   },
 
   reconciliation: {
