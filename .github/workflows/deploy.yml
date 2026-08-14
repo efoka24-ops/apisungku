@@ -120,7 +120,35 @@ jobs:
             echo "Remove unused images"
             docker image prune -af
 
-            echo "Deployment finished"
+            # Un `docker compose up -d` rend la main des que le conteneur est
+            # cree, meme s'il redemarre en boucle juste apres. Sans cette
+            # verification, un deploiement casse passe au vert et personne ne
+            # s'en apercoit avant de recevoir un 502.
+            #
+            # La sonde est locale au serveur : elle ne depend ni d'une URL
+            # publique, ni du reverse proxy, ni d'une variable a configurer.
+            echo "Verifie que le service repond"
+            SERVICE=$(docker compose ps --services | grep -i 'api\|sungku' | head -1)
+            SERVICE=${SERVICE:-api}
+
+            for i in $(seq 1 20); do
+              if docker compose exec -T "$SERVICE" \
+                   node -e "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+                   2>/dev/null; then
+                echo "Service operationnel apres ${i} tentative(s)."
+                echo "Deployment finished"
+                exit 0
+              fi
+              echo "Tentative $i : pas encore pret."
+              sleep 5
+            done
+
+            echo "ECHEC : le service ne repond pas apres 100 secondes."
+            echo "----- etat des conteneurs -----"
+            docker compose ps
+            echo "----- 80 dernieres lignes de journal -----"
+            docker compose logs --tail=80 "$SERVICE"
+            exit 1
 
       # - name: Verifier que le service repond
       #   # Un deploiement qui ne repond pas doit faire echouer le job, pas
