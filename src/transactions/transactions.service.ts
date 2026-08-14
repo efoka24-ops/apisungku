@@ -80,6 +80,7 @@ export class TransactionsService {
         phoneNumber,
         reference: dto.reference ?? null,
         description: dto.description ?? null,
+        customerMessage: dto.customerMessage ?? null,
         metadata: (dto.metadata ?? undefined) as Prisma.InputJsonValue,
       },
     });
@@ -88,20 +89,20 @@ export class TransactionsService {
       type: 'MMO' as const,
       accountDetails: { phoneNumber, provider },
     };
+    // clientReferenceId remonte la reference du projet jusqu'au tableau de bord
+    // pawaPay : indispensable pour rapprocher un litige sans passer par nos
+    // propres journaux.
+    const commun = {
+      amount: dto.amount,
+      currency: dto.currency,
+      ...(dto.reference ? { clientReferenceId: dto.reference } : {}),
+      ...(dto.customerMessage ? { customerMessage: dto.customerMessage } : {}),
+    };
+
     const payload =
       type === 'DEPOSIT'
-        ? {
-            depositId: id,
-            amount: dto.amount,
-            currency: dto.currency,
-            payer: party,
-          }
-        : {
-            payoutId: id,
-            amount: dto.amount,
-            currency: dto.currency,
-            recipient: party,
-          };
+        ? { depositId: id, ...commun, payer: party }
+        : { payoutId: id, ...commun, recipient: party };
 
     const updated = await this.dispatchInitiation(transaction, () =>
       type === 'DEPOSIT'
@@ -401,6 +402,7 @@ export class TransactionsService {
       phoneNumber: transaction.phoneNumber,
       reference: transaction.reference,
       description: transaction.description,
+      customerMessage: transaction.customerMessage,
       metadata: transaction.metadata,
       originalTransactionId: transaction.originalTransactionId,
       providerTransactionId: transaction.providerTransactionId,

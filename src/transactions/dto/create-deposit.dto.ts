@@ -4,6 +4,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Length,
   Matches,
   MaxLength,
 } from 'class-validator';
@@ -60,6 +61,23 @@ export class CreateDepositDto {
   @IsString()
   @MaxLength(255)
   description?: string;
+
+  @ApiPropertyOptional({
+    example: 'Cagnotte Mariage',
+    minLength: 4,
+    maxLength: 22,
+    description:
+      "Texte affiche au payeur sur l'invite de saisie du code PIN. Il s'ajoute " +
+      'au nom du marchand sans le remplacer. Un libelle parlant ameliore ' +
+      "sensiblement le taux d'autorisation : le payeur reconnait ce qu'il paie.",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(4, 22, {
+    message:
+      'customerMessage doit faire entre 4 et 22 caracteres (limite imposee par les operateurs).',
+  })
+  customerMessage?: string;
 
   @ApiPropertyOptional({
     description: 'Donnees libres restituees telles quelles dans les webhooks.',

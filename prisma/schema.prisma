@@ -79,6 +79,8 @@ model Transaction {
   /// Reference propre au projet client (numero de commande, id de cagnotte...).
   reference   String?
   description String?
+  /// Texte affiche au payeur sur l'invite PIN (4 a 22 caracteres).
+  customerMessage String?
   metadata    Json?
 
   /// Pour un remboursement : identifiant du depot rembourse.
