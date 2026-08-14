@@ -80,6 +80,46 @@ if [ "${DEPLOY_FAILED:-0}" = "1" ]; then
       log "Rattrapage termine, nouvelle tentative."
       "$PRISMA" migrate deploy
       ;;
+    *P3009*)
+      # Une migration est enregistree comme echouee. Prisma refuse alors toute
+      # nouvelle application, et le conteneur redemarre en boucle sans que le
+      # correctif du fichier SQL ne serve a rien.
+      #
+      # Le rattrapage n'est tente que si aucune de nos tables n'existe : dans
+      # ce cas la migration echouee n'a rien laisse derriere elle, la marquer
+      # rejouable ne peut donc rien detruire. Si des tables existent, on
+      # s'arrete — un rattrapage automatique risquerait des donnees.
+      MIGRATION=$(echo "$DEPLOY_OUTPUT" | sed -n 's/.*The `\([^`]*\)` migration started.*/\1/p' | head -1)
+      log "Migration '$MIGRATION' enregistree comme echouee."
+
+      if [ -z "$MIGRATION" ]; then
+        log "ECHEC : impossible d'identifier la migration en cause."
+        exit 1
+      fi
+
+      if node -e "
+        const { PrismaClient } = require('@prisma/client');
+        const p = new PrismaClient();
+        // La conversion en texte est necessaire : Prisma ne sait pas decoder
+        // le type regclass et leverait une exception, ce qui ferait refuser le
+        // rattrapage a tort.
+        p.\$queryRaw\`SELECT to_regclass('public.tenants')::text AS t\`
+          .then(([r]) => process.exit(r.t === null ? 0 : 1))
+          .catch(() => process.exit(1))
+          .finally(() => p.\$disconnect());
+      " 2>/dev/null; then
+        log "Aucune table applicative presente : la migration est marquee rejouable."
+        "$PRISMA" migrate resolve --rolled-back "$MIGRATION"
+        log "Nouvelle tentative d'application."
+        "$PRISMA" migrate deploy
+      else
+        log "ECHEC : des tables existent deja. Rattrapage automatique refuse."
+        log "Intervention manuelle requise : verifier l'etat du schema, puis"
+        log "  npx prisma migrate resolve --rolled-back $MIGRATION"
+        exit 1
+      fi
+      ;;
+
     *)
       log "ECHEC de la migration. Le service ne demarre pas : mieux vaut un"
       log "refus net qu'un service tournant sur un schema incoherent."
